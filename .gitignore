@@ -1,0 +1,8 @@
+.DS_Store
+.gradle/
+.vscode/
+HELP.md
+build/
+gradle/cache/
+target/
+signals.json
