@@ -1,0 +1,12 @@
+.DS_Store
+.gradle/
+.vscode/
+HELP.md
+build/
+bin/
+gradle/cache/
+target/
+signals.json
+.claude/
+**/*.class
+src/main/resources/application-local.properties
