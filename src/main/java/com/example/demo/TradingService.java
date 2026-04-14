@@ -9,11 +9,9 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 
-import java.io.File;
 import java.io.IOException;
+import java.time.DayOfWeek;
 import java.time.LocalDate;
-import java.util.List;
-import java.util.Map;
 
 @Service
 public class TradingService {
@@ -31,49 +29,104 @@ public class TradingService {
         this.tokenStore = tokenStore;
     }
 
-    public void syncData() throws IOException {
+    public SyncResult syncData() throws IOException {
+        log.info("Starting stock data sync...");
         String authHeader = tokenStore.getAuthHeader();
+        int successCount = 0;
+        int errorCount = 0;
 
-        for (String token : AppConstants.INSTRUMENT_TOKENS) {
-            String url = String.format(
-                    "https://api.kite.trade/instruments/historical/%s/day?from=2026-04-01+09:15:00&to=2026-04-12+09:15:00",
-                    token);
+        // Skip if today is weekend
+        LocalDate today = LocalDate.now();
+        DayOfWeek dayOfWeek = today.getDayOfWeek();
+        if (dayOfWeek == DayOfWeek.SATURDAY || dayOfWeek == DayOfWeek.SUNDAY) {
+            log.info("Skipping sync on {} (market closed)", dayOfWeek);
+            return new SyncResult(0, 0, "SKIPPED", "Market closed on " + dayOfWeek);
+        }
 
-            HttpHeaders headers = new HttpHeaders();
-            headers.set("X-Kite-Version", "3");
-            headers.set("Authorization", authHeader);
-            HttpEntity<String> entity = new HttpEntity<>(headers);
+        // Load EQ instruments only (equities, not derivatives)
+        String sql = "SELECT instrument_token FROM instruments WHERE exchange = 'BSE' AND instrument_type = 'EQ' ORDER BY instrument_token";
+        java.util.List<String> tokens = jdbcTemplate.queryForList(sql, String.class);
+        log.info("Loaded {} BSE EQ instruments from database", tokens.size());
 
-            ResponseEntity<String> response = restTemplate.exchange(url, HttpMethod.GET, entity, String.class);
-            log.info("[{}] Raw response: {}", token, response.getBody()); // 1. see what the API actually returned
+        if (tokens.isEmpty()) {
+            log.warn("No BSE EQ instruments found. Run POST /stock/refresh first");
+            return new SyncResult(0, 0, "SKIPPED", "No EQ instruments in database. Run refresh first.");
+        }
 
-            // 2. Parse and Save to DB
-            JsonNode root = objectMapper.readTree(response.getBody());
-            JsonNode candles = root.path("data").path("candles");
-            log.info("[{}] Candle count: {}", token, candles.size()); // 2. confirm candles were found
+        // Process in batches of 1000 (Kite API limit)
+        final int BATCH_SIZE_TOKENS = 1000;
+        for (int i = 0; i < tokens.size(); i += BATCH_SIZE_TOKENS) {
+            int endIndex = Math.min(i + BATCH_SIZE_TOKENS, tokens.size());
+            java.util.List<String> batch = tokens.subList(i, endIndex);
+            log.info("Processing batch {}-{} ({} tokens)", i, endIndex, batch.size());
 
-            for (JsonNode candle : candles) {
-                String date = candle.get(0) != null ? candle.get(0).asText() : "NULL";
-                String close = candle.get(4) != null ? candle.get(4).asText() : "NULL";
-                log.info("[{}] Inserting — date: {}, close: {}", token, date, close); // 3. spot bad values before insert
+            for (String token : batch) {
+            try {
+                // Incremental sync: skip if already have today's data
+                Integer existingCount = jdbcTemplate.queryForObject(
+                        "SELECT COUNT(*) FROM stock_history WHERE symbol = ? AND trade_date = ?",
+                        new Object[]{token, today},
+                        Integer.class);
+                if (existingCount != null && existingCount > 0) {
+                    log.debug("[{}] Already synced for today, skipping", token);
+                    successCount++;
+                    continue;
+                }
 
-                LocalDate tradeDate = LocalDate.parse(date.split("T")[0]);
-                jdbcTemplate.update(
-                        "INSERT INTO stock_history (symbol, trade_date, close_price) VALUES (?, ?, ?) " +
-                                "ON CONFLICT (symbol, trade_date) " +
-                                "DO UPDATE SET close_price = EXCLUDED.close_price",
-                        token,
-                        tradeDate,
-                        candle.get(4).asDouble());
+                // Rate limiting: 3 requests/second (Kite limit)
+                Thread.sleep(350);
+
+                String url = String.format(
+                        "https://api.kite.trade/instruments/historical/%s/day?from=2026-04-01+09:15:00&to=%s+09:15:00",
+                        token, today);
+
+                HttpHeaders headers = new HttpHeaders();
+                headers.set("X-Kite-Version", "3");
+                headers.set("Authorization", authHeader);
+                HttpEntity<String> entity = new HttpEntity<>(headers);
+
+                log.info("[{}] Fetching historical data from: {}", token, url);
+                ResponseEntity<String> response = restTemplate.exchange(url, HttpMethod.GET, entity, String.class);
+                log.info("[{}] Response status: {}", token, response.getStatusCode());
+
+                // Parse and Save to DB
+                JsonNode root = objectMapper.readTree(response.getBody());
+                JsonNode candles = root.path("data").path("candles");
+                log.info("[{}] Candle count: {}", token, candles.size());
+
+                int insertCount = 0;
+                for (JsonNode candle : candles) {
+                    try {
+                        String date = candle.get(0) != null ? candle.get(0).asText() : "NULL";
+
+                        LocalDate tradeDate = LocalDate.parse(date.split("T")[0]);
+                        jdbcTemplate.update(
+                                "INSERT INTO stock_history (symbol, trade_date, close_price) VALUES (?, ?, ?) " +
+                                        "ON CONFLICT (symbol, trade_date) " +
+                                        "DO UPDATE SET close_price = EXCLUDED.close_price",
+                                token,
+                                tradeDate,
+                                candle.get(4).asDouble());
+                        insertCount++;
+                    } catch (Exception e) {
+                        log.warn("[{}] Error inserting candle: {}", token, e.getMessage());
+                        errorCount++;
+                    }
+                }
+
+                successCount += insertCount;
+                log.info("[{}] Synced {} candles. Total success: {}, errors: {}", token, insertCount, successCount, errorCount);
+
+            } catch (Exception e) {
+                log.error("[{}] Error fetching/processing data: {}", token, e.getMessage());
+                errorCount++;
+            }
             }
         }
+
+        log.info("Stock data sync complete. Total success: {}, errors: {}", successCount, errorCount);
+        return new SyncResult(successCount, errorCount, "COMPLETED",
+            String.format("Synced %d candles with %d errors", successCount, errorCount));
     }
 
-    public String generateSignalsJson() throws IOException {
-        // Query the view we created earlier
-        List<Map<String, Object>> results = jdbcTemplate.queryForList("SELECT * FROM v_stock_analysis");
-        File file = new File("signals.json");
-        objectMapper.writeValue(file, results);
-        return file.getAbsolutePath();
-    }
 }

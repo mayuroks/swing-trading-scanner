@@ -1,28 +1,32 @@
 package com.example.demo;
 
-import org.springframework.web.bind.annotation.GetMapping;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
-@RequestMapping("/equity")
+@RequestMapping("/stock")
 public class EquityController {
 
+    private static final Logger log = LoggerFactory.getLogger(EquityController.class);
     private final InstrumentSyncService instrumentSyncService;
 
     public EquityController(InstrumentSyncService instrumentSyncService) {
         this.instrumentSyncService = instrumentSyncService;
     }
 
-    @GetMapping("/refresh")
+    @PostMapping("/refresh")
     public String refreshInstruments() {
         new Thread(() -> {
             try {
-                instrumentSyncService.syncInstruments();
+                SyncResult result = instrumentSyncService.syncInstruments();
+                log.info("Instrument refresh completed: {}", result);
             } catch (Exception e) {
-                // Synced logged in service
+                log.error("Instrument refresh failed: {}", e.getMessage());
             }
         }).start();
-        return "Refreshing in progress. Please check back in a minute";
+        return "Refreshing instrument data in progress. Please check back in a minute";
     }
 }

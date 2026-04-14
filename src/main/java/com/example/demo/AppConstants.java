@@ -1,11 +1,6 @@
 package com.example.demo;
 
 public class AppConstants {
-
-    public static final String[] INSTRUMENT_TOKENS = {
-        "408065",
-        "738561"
-    };
-
+    // Instrument tokens now loaded dynamically from instruments table in TradingService
     private AppConstants() {}
 }

@@ -27,7 +27,7 @@ public class InstrumentSyncService {
         this.tokenStore = tokenStore;
     }
 
-    public void syncInstruments() throws Exception {
+    public SyncResult syncInstruments() throws Exception {
         log.info("Starting instrument sync...");
         log.debug("Auth header: {}", tokenStore.getAuthHeader());
 
@@ -69,10 +69,12 @@ public class InstrumentSyncService {
             reader = new BufferedReader(new InputStreamReader(inputStream));
         }
 
+        int successCount = 0;
+        int errorCount = 0;
+
         try (reader) {
             String line;
             boolean isHeader = true;
-            int count = 0;
             java.util.List<Object[]> batch = new java.util.ArrayList<>();
 
             while ((line = reader.readLine()) != null) {
@@ -85,6 +87,7 @@ public class InstrumentSyncService {
                 String[] cols = parseCSVLine(line);
                 if (cols.length < 12) {
                     log.warn("Row has insufficient columns ({}): {}", cols.length, line);
+                    errorCount++;
                     continue;
                 }
 
@@ -111,22 +114,25 @@ public class InstrumentSyncService {
 
                     if (batch.size() >= BATCH_SIZE) {
                         executeBatch(batch);
-                        count += batch.size();
-                        log.info("Synced {} instruments so far", count);
+                        successCount += batch.size();
+                        log.info("Synced {} instruments so far (success: {}, errors: {})", successCount, successCount, errorCount);
                         batch.clear();
                     }
                 } catch (Exception e) {
                     log.warn("Skipping row: {}, error: {}", line, e.getMessage());
+                    errorCount++;
                 }
             }
 
             // Insert remaining records
             if (!batch.isEmpty()) {
                 executeBatch(batch);
-                count += batch.size();
+                successCount += batch.size();
             }
 
-            log.info("Instrument sync complete. Total: {}", count);
+            log.info("Instrument sync complete. Total success: {}, errors: {}", successCount, errorCount);
+            return new SyncResult(successCount, errorCount, "COMPLETED",
+                String.format("Synced %d instruments with %d errors", successCount, errorCount));
         }
     }
 

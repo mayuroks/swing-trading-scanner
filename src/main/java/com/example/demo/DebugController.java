@@ -1,32 +1,32 @@
 package com.example.demo;
 
-import org.springframework.web.bind.annotation.GetMapping;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.io.IOException;
-
 @RestController
-@RequestMapping("/debug")
+@RequestMapping("/stock")
 public class DebugController {
 
+    private static final Logger log = LoggerFactory.getLogger(DebugController.class);
     private final TradingService tradingService;
 
     public DebugController(TradingService tradingService) {
         this.tradingService = tradingService;
     }
 
-    @GetMapping("/run-analysis")
+    @PostMapping("/analyze")
     public String runAnalysis() {
-        try {
-            // First, fetch fresh data and put it in DB
-            tradingService.syncData();
-
-            // Then, generate the JSON from the View
-            String path = tradingService.generateSignalsJson();
-            return "Data synced and JSON Generated at: " + path;
-        } catch (Exception e) {
-            return "Error: " + e.getMessage();
-        }
+        new Thread(() -> {
+            try {
+                SyncResult result = tradingService.syncData();
+                log.info("Stock analysis completed: {}", result);
+            } catch (Exception e) {
+                log.error("Stock analysis failed: {}", e.getMessage());
+            }
+        }).start();
+        return "Analyzing started. Please check again in a minute";
     }
 }
