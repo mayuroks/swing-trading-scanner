@@ -101,12 +101,13 @@ public class TradingService {
 
                         LocalDate tradeDate = LocalDate.parse(date.split("T")[0]);
                         jdbcTemplate.update(
-                                "INSERT INTO stock_history (symbol, trade_date, close_price) VALUES (?, ?, ?) " +
+                                "INSERT INTO stock_history (symbol, trade_date, close_price, volume) VALUES (?, ?, ?, ?) " +
                                         "ON CONFLICT (symbol, trade_date) " +
-                                        "DO UPDATE SET close_price = EXCLUDED.close_price",
+                                        "DO UPDATE SET close_price = EXCLUDED.close_price, volume = EXCLUDED.volume",
                                 token,
                                 tradeDate,
-                                candle.get(4).asDouble());
+                                candle.get(4).asDouble(),
+                                candle.get(5).asLong());
                         insertCount++;
                     } catch (Exception e) {
                         log.warn("[{}] Error inserting candle: {}", token, e.getMessage());

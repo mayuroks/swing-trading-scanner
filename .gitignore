@@ -6,3 +6,4 @@ build/
 gradle/cache/
 target/
 signals.json
+.claude/

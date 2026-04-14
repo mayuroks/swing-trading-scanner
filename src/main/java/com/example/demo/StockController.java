@@ -46,7 +46,7 @@ public class StockController {
             "WITH latest AS (" +
             "  SELECT DISTINCT ON (instrument_token) " +
             "    instrument_token, tradingsymbol, name, exchange, instrument_type, " +
-            "    trade_date, close_price, " +
+            "    trade_date, close_price, volume, avg_volume_30d, week52_high, week52_low, " +
             "    pct_1d, pct_3d, pct_7d, pct_10d, pct_15d, pct_1m " +
             "  FROM v_stock_analysis " +
             "  WHERE exchange = 'BSE' " +
@@ -56,17 +56,17 @@ public class StockController {
         // Unpivot all pct windows into separate rows
         String dataSql = cte +
             "SELECT instrument_token, tradingsymbol, name, exchange, instrument_type, " +
-            "  trade_date, close_price, 'pct_1d' AS window, pct_1d AS pct_change FROM latest WHERE pct_1d IS NOT NULL AND pct_1d " + signOp + " 0 " +
+            "  trade_date, close_price, volume, avg_volume_30d, week52_high, week52_low, 'pct_1d' AS window, pct_1d AS pct_change FROM latest WHERE pct_1d IS NOT NULL AND pct_1d " + signOp + " 0 " +
             "UNION ALL SELECT instrument_token, tradingsymbol, name, exchange, instrument_type, " +
-            "  trade_date, close_price, 'pct_3d' AS window, pct_3d AS pct_change FROM latest WHERE pct_3d IS NOT NULL AND pct_3d " + signOp + " 0 " +
+            "  trade_date, close_price, volume, avg_volume_30d, week52_high, week52_low, 'pct_3d' AS window, pct_3d AS pct_change FROM latest WHERE pct_3d IS NOT NULL AND pct_3d " + signOp + " 0 " +
             "UNION ALL SELECT instrument_token, tradingsymbol, name, exchange, instrument_type, " +
-            "  trade_date, close_price, 'pct_7d' AS window, pct_7d AS pct_change FROM latest WHERE pct_7d IS NOT NULL AND pct_7d " + signOp + " 0 " +
+            "  trade_date, close_price, volume, avg_volume_30d, week52_high, week52_low, 'pct_7d' AS window, pct_7d AS pct_change FROM latest WHERE pct_7d IS NOT NULL AND pct_7d " + signOp + " 0 " +
             "UNION ALL SELECT instrument_token, tradingsymbol, name, exchange, instrument_type, " +
-            "  trade_date, close_price, 'pct_10d' AS window, pct_10d AS pct_change FROM latest WHERE pct_10d IS NOT NULL AND pct_10d " + signOp + " 0 " +
+            "  trade_date, close_price, volume, avg_volume_30d, week52_high, week52_low, 'pct_10d' AS window, pct_10d AS pct_change FROM latest WHERE pct_10d IS NOT NULL AND pct_10d " + signOp + " 0 " +
             "UNION ALL SELECT instrument_token, tradingsymbol, name, exchange, instrument_type, " +
-            "  trade_date, close_price, 'pct_15d' AS window, pct_15d AS pct_change FROM latest WHERE pct_15d IS NOT NULL AND pct_15d " + signOp + " 0 " +
+            "  trade_date, close_price, volume, avg_volume_30d, week52_high, week52_low, 'pct_15d' AS window, pct_15d AS pct_change FROM latest WHERE pct_15d IS NOT NULL AND pct_15d " + signOp + " 0 " +
             "UNION ALL SELECT instrument_token, tradingsymbol, name, exchange, instrument_type, " +
-            "  trade_date, close_price, 'pct_1m' AS window, pct_1m AS pct_change FROM latest WHERE pct_1m IS NOT NULL AND pct_1m " + signOp + " 0 " +
+            "  trade_date, close_price, volume, avg_volume_30d, week52_high, week52_low, 'pct_1m' AS window, pct_1m AS pct_change FROM latest WHERE pct_1m IS NOT NULL AND pct_1m " + signOp + " 0 " +
             "ORDER BY pct_change " + sortDir + " " +
             "LIMIT ? OFFSET ?";
 
