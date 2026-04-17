@@ -65,8 +65,9 @@ public class TradingService {
                 // Incremental sync: skip if already have today's data
                 Integer existingCount = jdbcTemplate.queryForObject(
                         "SELECT COUNT(*) FROM stock_history WHERE symbol = ? AND trade_date = ?",
-                        new Object[]{token, today},
-                        Integer.class);
+                        Integer.class,
+                        token,
+                        today);
                 if (existingCount != null && existingCount > 0) {
                     log.debug("[{}] Already synced for today, skipping", token);
                     successCount++;

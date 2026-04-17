@@ -12,9 +12,11 @@ public class DebugController {
 
     private static final Logger log = LoggerFactory.getLogger(DebugController.class);
     private final TradingService tradingService;
+    private final TelegramService telegramService;
 
-    public DebugController(TradingService tradingService) {
+    public DebugController(TradingService tradingService, TelegramService telegramService) {
         this.tradingService = tradingService;
+        this.telegramService = telegramService;
     }
 
     @PostMapping("/analyze")
@@ -23,6 +25,7 @@ public class DebugController {
             try {
                 SyncResult result = tradingService.syncData();
                 log.info("Stock analysis completed: {}", result);
+                telegramService.sendDropReport();
             } catch (Exception e) {
                 log.error("Stock analysis failed: {}", e.getMessage());
             }
