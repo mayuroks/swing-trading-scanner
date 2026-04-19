@@ -38,7 +38,7 @@ public class TradingService {
         // Skip if today is weekend
         LocalDate today = LocalDate.now();
         DayOfWeek dayOfWeek = today.getDayOfWeek();
-        if (dayOfWeek == DayOfWeek.SATURDAY || dayOfWeek == DayOfWeek.SUNDAY) {
+        if (!AppConstants.SKIP_WEEKEND_CHECK && (dayOfWeek == DayOfWeek.SATURDAY || dayOfWeek == DayOfWeek.SUNDAY)) {
             log.info("Skipping sync on {} (market closed)", dayOfWeek);
             return new SyncResult(0, 0, "SKIPPED", "Market closed on " + dayOfWeek);
         }

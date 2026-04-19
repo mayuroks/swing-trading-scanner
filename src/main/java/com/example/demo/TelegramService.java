@@ -71,6 +71,15 @@ public class TelegramService {
         }
     }
 
+    private String formatVolume(long volume) {
+        if (volume >= 1_000_000) {
+            return String.format("%.1fM", volume / 1_000_000.0);
+        } else if (volume >= 1_000) {
+            return String.format("%.0fK", volume / 1_000.0);
+        }
+        return String.valueOf(volume);
+    }
+
     private void sendMessages(List<String> messages) {
         for (int i = 0; i < messages.size(); i++) {
             sendTelegramMessage(messages.get(i));
@@ -152,7 +161,7 @@ public class TelegramService {
 
                     sb.append("• ").append(symbol).append(" — ").append(String.format("%.1f%%", pctChange))
                         .append(" | ₹").append(String.format("%.2f", closePrice))
-                        .append(" | Vol ").append(String.format("%.1f", volRatio)).append("x")
+                        .append(" | Vol ").append(formatVolume(volume)).append(" (").append(String.format("%.1f", volRatio)).append("x avg)")
                         .append(" | +").append(String.format("%.0f%%", pctFromLow)).append(" from low\n");
                 }
                 sb.append("\n");
