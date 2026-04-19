@@ -30,7 +30,6 @@ public class TradingService {
     }
 
     public SyncResult syncData() throws IOException {
-        log.info("Starting stock data sync...");
         String authHeader = tokenStore.getAuthHeader();
         int successCount = 0;
         int errorCount = 0;
@@ -39,7 +38,6 @@ public class TradingService {
         LocalDate today = LocalDate.now();
         DayOfWeek dayOfWeek = today.getDayOfWeek();
         if (!AppConstants.SKIP_WEEKEND_CHECK && (dayOfWeek == DayOfWeek.SATURDAY || dayOfWeek == DayOfWeek.SUNDAY)) {
-            log.info("Skipping sync on {} (market closed)", dayOfWeek);
             return new SyncResult(0, 0, "SKIPPED", "Market closed on " + dayOfWeek);
         }
 
@@ -47,11 +45,9 @@ public class TradingService {
         java.util.List<String> tokens;
         if (AppConstants.TEST_INSTRUMENTS_LIST != null && !AppConstants.TEST_INSTRUMENTS_LIST.isEmpty()) {
             tokens = java.util.Arrays.asList(AppConstants.TEST_INSTRUMENTS_LIST.split(","));
-            log.info("TEST MODE: Loaded {} instruments from AppConstants", tokens.size());
         } else {
             String sql = "SELECT instrument_token FROM instruments WHERE exchange = 'BSE' AND instrument_type = 'EQ' ORDER BY instrument_token";
             tokens = jdbcTemplate.queryForList(sql, String.class);
-            log.info("Loaded {} BSE EQ instruments from database", tokens.size());
         }
 
         if (tokens.isEmpty()) {
@@ -64,7 +60,6 @@ public class TradingService {
         for (int i = 0; i < tokens.size(); i += BATCH_SIZE_TOKENS) {
             int endIndex = Math.min(i + BATCH_SIZE_TOKENS, tokens.size());
             java.util.List<String> batch = tokens.subList(i, endIndex);
-            log.info("Processing batch {}-{} ({} tokens)", i, endIndex, batch.size());
 
             for (String token : batch) {
             try {
@@ -75,7 +70,6 @@ public class TradingService {
                         token,
                         today);
                 if (existingCount != null && existingCount > 0) {
-                    log.debug("[{}] Already synced for today, skipping", token);
                     successCount++;
                     continue;
                 }
@@ -92,14 +86,11 @@ public class TradingService {
                 headers.set("Authorization", authHeader);
                 HttpEntity<String> entity = new HttpEntity<>(headers);
 
-                log.info("[{}] Fetching historical data from: {}", token, url);
                 ResponseEntity<String> response = restTemplate.exchange(url, HttpMethod.GET, entity, String.class);
-                log.info("[{}] Response status: {}", token, response.getStatusCode());
 
                 // Parse and Save to DB
                 JsonNode root = objectMapper.readTree(response.getBody());
                 JsonNode candles = root.path("data").path("candles");
-                log.info("[{}] Candle count: {}", token, candles.size());
 
                 int insertCount = 0;
                 for (JsonNode candle : candles) {
@@ -123,7 +114,6 @@ public class TradingService {
                 }
 
                 successCount += insertCount;
-                log.info("[{}] Synced {} candles. Total success: {}, errors: {}", token, insertCount, successCount, errorCount);
 
             } catch (Exception e) {
                 log.error("[{}] Error fetching/processing data: {}", token, e.getMessage());
@@ -132,7 +122,6 @@ public class TradingService {
             }
         }
 
-        log.info("Stock data sync complete. Total success: {}, errors: {}", successCount, errorCount);
         return new SyncResult(successCount, errorCount, "COMPLETED",
             String.format("Synced %d candles with %d errors", successCount, errorCount));
     }

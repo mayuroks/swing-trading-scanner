@@ -57,7 +57,6 @@ public class TelegramService {
                     "ORDER BY time_window, pct_change ASC";
 
             List<Map<String, Object>> drops = jdbcTemplate.queryForList(sql);
-            log.info("Found {} stocks with >= 10% drops", drops.size());
 
             if (drops.isEmpty()) {
                 sendTelegramMessage("✅ No major drops today.");
@@ -91,7 +90,6 @@ public class TelegramService {
                 }
             }
         }
-        log.info("Sent {} drop report messages", messages.size());
     }
 
     private List<String> splitMessages(String fullMessage) {
@@ -205,7 +203,6 @@ public class TelegramService {
             HttpEntity<String> entity = new HttpEntity<>(body, headers);
 
             restTemplate.postForObject(url, entity, String.class);
-            log.info("Drop report sent to Telegram successfully");
         } catch (Exception e) {
             log.error("Failed to send Telegram message: {}", e.getMessage(), e);
         }

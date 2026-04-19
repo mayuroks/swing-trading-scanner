@@ -28,9 +28,6 @@ public class InstrumentSyncService {
     }
 
     public SyncResult syncInstruments() throws Exception {
-        log.info("Starting instrument sync...");
-        log.debug("Auth header: {}", tokenStore.getAuthHeader());
-
         // Fetch gzipped CSV from Kite API
         String authHeader = tokenStore.getAuthHeader();
         URI uri = new URI(INSTRUMENTS_URL);
@@ -38,11 +35,7 @@ public class InstrumentSyncService {
         conn.setRequestProperty("X-Kite-Version", "3");
         conn.setRequestProperty("Authorization", authHeader);
 
-        log.info("Request URL: {}", INSTRUMENTS_URL);
-        log.info("Request headers - X-Kite-Version: 3, Authorization: {}", authHeader);
-
         int statusCode = conn.getResponseCode();
-        log.info("Response status code: {}", statusCode);
 
         if (statusCode != 200) {
             BufferedReader errorReader = new BufferedReader(new InputStreamReader(conn.getErrorStream()));
@@ -56,16 +49,13 @@ public class InstrumentSyncService {
         }
 
         String contentEncoding = conn.getHeaderField("Content-Encoding");
-        log.info("Content-Encoding header: {}", contentEncoding);
 
         InputStream inputStream = conn.getInputStream();
         BufferedReader reader;
 
         if ("gzip".equals(contentEncoding)) {
-            log.info("Decompressing gzip response");
             reader = new BufferedReader(new InputStreamReader(new GZIPInputStream(inputStream)));
         } else {
-            log.info("Response is not gzipped, reading as plain text");
             reader = new BufferedReader(new InputStreamReader(inputStream));
         }
 
@@ -80,7 +70,6 @@ public class InstrumentSyncService {
             while ((line = reader.readLine()) != null) {
                 if (isHeader) {
                     isHeader = false;
-                    log.debug("Header line: {}", line);
                     continue;
                 }
 
@@ -115,7 +104,6 @@ public class InstrumentSyncService {
                     if (batch.size() >= BATCH_SIZE) {
                         executeBatch(batch);
                         successCount += batch.size();
-                        log.info("Synced {} instruments so far (success: {}, errors: {})", successCount, successCount, errorCount);
                         batch.clear();
                     }
                 } catch (Exception e) {
@@ -138,9 +126,7 @@ public class InstrumentSyncService {
                 "  SELECT DISTINCT symbol FROM stock_history " +
                 "  WHERE trade_date >= CURRENT_DATE - INTERVAL '30 days'" +
                 ")");
-            log.info("Purged {} inactive BSE EQ instruments", deleted);
 
-            log.info("Instrument sync complete. Total success: {}, errors: {}", successCount, errorCount);
             return new SyncResult(successCount, errorCount, "COMPLETED",
                 String.format("Synced %d instruments with %d errors, purged %d inactive", successCount, errorCount, deleted));
         }
@@ -152,7 +138,7 @@ public class InstrumentSyncService {
                 "ON CONFLICT (instrument_token) DO UPDATE SET " +
                 "last_price = EXCLUDED.last_price, updated_at = CURRENT_TIMESTAMP";
 
-        int[][] batchResults = jdbcTemplate.batchUpdate(sql, batch, BATCH_SIZE,
+        jdbcTemplate.batchUpdate(sql, batch, BATCH_SIZE,
                 (ps, argument) -> {
                     ps.setString(1, (String) argument[0]);
                     ps.setString(2, (String) argument[1]);
@@ -167,8 +153,6 @@ public class InstrumentSyncService {
                     ps.setString(11, (String) argument[10]);
                     ps.setString(12, (String) argument[11]);
                 });
-
-        log.debug("Batch insert completed. Rows affected: {}", batchResults.length);
     }
 
     private String[] parseCSVLine(String line) {
