@@ -43,10 +43,16 @@ public class TradingService {
             return new SyncResult(0, 0, "SKIPPED", "Market closed on " + dayOfWeek);
         }
 
-        // Load EQ instruments only (equities, not derivatives)
-        String sql = "SELECT instrument_token FROM instruments WHERE exchange = 'BSE' AND instrument_type = 'EQ' ORDER BY instrument_token";
-        java.util.List<String> tokens = jdbcTemplate.queryForList(sql, String.class);
-        log.info("Loaded {} BSE EQ instruments from database", tokens.size());
+        // Load EQ instruments: test mode or production
+        java.util.List<String> tokens;
+        if (AppConstants.TEST_INSTRUMENTS_LIST != null && !AppConstants.TEST_INSTRUMENTS_LIST.isEmpty()) {
+            tokens = java.util.Arrays.asList(AppConstants.TEST_INSTRUMENTS_LIST.split(","));
+            log.info("TEST MODE: Loaded {} instruments from AppConstants", tokens.size());
+        } else {
+            String sql = "SELECT instrument_token FROM instruments WHERE exchange = 'BSE' AND instrument_type = 'EQ' ORDER BY instrument_token";
+            tokens = jdbcTemplate.queryForList(sql, String.class);
+            log.info("Loaded {} BSE EQ instruments from database", tokens.size());
+        }
 
         if (tokens.isEmpty()) {
             log.warn("No BSE EQ instruments found. Run POST /stock/refresh first");

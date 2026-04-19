@@ -130,9 +130,19 @@ public class InstrumentSyncService {
                 successCount += batch.size();
             }
 
+            // Purge inactive instruments — no stock_history in last 30 days
+            int deleted = jdbcTemplate.update(
+                "DELETE FROM instruments " +
+                "WHERE exchange = 'BSE' AND instrument_type = 'EQ' " +
+                "AND instrument_token NOT IN (" +
+                "  SELECT DISTINCT symbol FROM stock_history " +
+                "  WHERE trade_date >= CURRENT_DATE - INTERVAL '30 days'" +
+                ")");
+            log.info("Purged {} inactive BSE EQ instruments", deleted);
+
             log.info("Instrument sync complete. Total success: {}, errors: {}", successCount, errorCount);
             return new SyncResult(successCount, errorCount, "COMPLETED",
-                String.format("Synced %d instruments with %d errors", successCount, errorCount));
+                String.format("Synced %d instruments with %d errors, purged %d inactive", successCount, errorCount, deleted));
         }
     }
 

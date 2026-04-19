@@ -48,13 +48,13 @@ public class TelegramService {
                     "  WHERE exchange = 'BSE' " +
                     "  ORDER BY instrument_token, trade_date DESC " +
                     ") " +
-                    "SELECT tradingsymbol, name, 'pct_1d' AS window, pct_1d AS pct_change FROM latest WHERE pct_1d IS NOT NULL AND pct_1d <= -10 " +
+                    "SELECT tradingsymbol, name, 'pct_1d' AS time_window, pct_1d AS pct_change FROM latest WHERE pct_1d IS NOT NULL AND pct_1d <= -10 " +
                     "UNION ALL SELECT tradingsymbol, name, 'pct_3d', pct_3d FROM latest WHERE pct_3d IS NOT NULL AND pct_3d <= -10 " +
                     "UNION ALL SELECT tradingsymbol, name, 'pct_7d', pct_7d FROM latest WHERE pct_7d IS NOT NULL AND pct_7d <= -10 " +
                     "UNION ALL SELECT tradingsymbol, name, 'pct_10d', pct_10d FROM latest WHERE pct_10d IS NOT NULL AND pct_10d <= -10 " +
                     "UNION ALL SELECT tradingsymbol, name, 'pct_15d', pct_15d FROM latest WHERE pct_15d IS NOT NULL AND pct_15d <= -10 " +
                     "UNION ALL SELECT tradingsymbol, name, 'pct_1m', pct_1m FROM latest WHERE pct_1m IS NOT NULL AND pct_1m <= -10 " +
-                    "ORDER BY window, pct_change ASC";
+                    "ORDER BY time_window, pct_change ASC";
 
             List<Map<String, Object>> drops = jdbcTemplate.queryForList(sql);
             log.info("Found {} stocks with >= 10% drops", drops.size());
@@ -84,7 +84,7 @@ public class TelegramService {
         }
 
         for (Map<String, Object> drop : drops) {
-            String window = (String) drop.get("window");
+            String window = (String) drop.get("time_window");
             grouped.get(window).add(drop);
         }
 
