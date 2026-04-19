@@ -45,7 +45,7 @@ public class TelegramService {
                     "    instrument_token, tradingsymbol, name, close_price, volume, avg_volume_30d, week52_low, " +
                     "    pct_1d, pct_3d, pct_7d, pct_10d, pct_15d, pct_1m " +
                     "  FROM v_stock_analysis " +
-                    "  WHERE exchange = 'BSE' " +
+                    "  WHERE exchange = 'BSE' AND volume >= 50000 " +
                     "  ORDER BY instrument_token, trade_date DESC " +
                     ") " +
                     "SELECT tradingsymbol, name, close_price, volume, avg_volume_30d, week52_low, 'pct_1d' AS time_window, pct_1d AS pct_change FROM latest WHERE pct_1d IS NOT NULL AND pct_1d <= -10 " +
