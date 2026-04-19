@@ -42,34 +42,78 @@ public class TelegramService {
         try {
             String sql = "WITH latest AS (" +
                     "  SELECT DISTINCT ON (instrument_token) " +
-                    "    instrument_token, tradingsymbol, name, " +
+                    "    instrument_token, tradingsymbol, name, close_price, volume, avg_volume_30d, week52_low, " +
                     "    pct_1d, pct_3d, pct_7d, pct_10d, pct_15d, pct_1m " +
                     "  FROM v_stock_analysis " +
                     "  WHERE exchange = 'BSE' " +
                     "  ORDER BY instrument_token, trade_date DESC " +
                     ") " +
-                    "SELECT tradingsymbol, name, 'pct_1d' AS time_window, pct_1d AS pct_change FROM latest WHERE pct_1d IS NOT NULL AND pct_1d <= -10 " +
-                    "UNION ALL SELECT tradingsymbol, name, 'pct_3d', pct_3d FROM latest WHERE pct_3d IS NOT NULL AND pct_3d <= -10 " +
-                    "UNION ALL SELECT tradingsymbol, name, 'pct_7d', pct_7d FROM latest WHERE pct_7d IS NOT NULL AND pct_7d <= -10 " +
-                    "UNION ALL SELECT tradingsymbol, name, 'pct_10d', pct_10d FROM latest WHERE pct_10d IS NOT NULL AND pct_10d <= -10 " +
-                    "UNION ALL SELECT tradingsymbol, name, 'pct_15d', pct_15d FROM latest WHERE pct_15d IS NOT NULL AND pct_15d <= -10 " +
-                    "UNION ALL SELECT tradingsymbol, name, 'pct_1m', pct_1m FROM latest WHERE pct_1m IS NOT NULL AND pct_1m <= -10 " +
+                    "SELECT tradingsymbol, name, close_price, volume, avg_volume_30d, week52_low, 'pct_1d' AS time_window, pct_1d AS pct_change FROM latest WHERE pct_1d IS NOT NULL AND pct_1d <= -10 " +
+                    "UNION ALL SELECT tradingsymbol, name, close_price, volume, avg_volume_30d, week52_low, 'pct_3d', pct_3d FROM latest WHERE pct_3d IS NOT NULL AND pct_3d <= -10 " +
+                    "UNION ALL SELECT tradingsymbol, name, close_price, volume, avg_volume_30d, week52_low, 'pct_7d', pct_7d FROM latest WHERE pct_7d IS NOT NULL AND pct_7d <= -10 " +
+                    "UNION ALL SELECT tradingsymbol, name, close_price, volume, avg_volume_30d, week52_low, 'pct_10d', pct_10d FROM latest WHERE pct_10d IS NOT NULL AND pct_10d <= -10 " +
+                    "UNION ALL SELECT tradingsymbol, name, close_price, volume, avg_volume_30d, week52_low, 'pct_15d', pct_15d FROM latest WHERE pct_15d IS NOT NULL AND pct_15d <= -10 " +
+                    "UNION ALL SELECT tradingsymbol, name, close_price, volume, avg_volume_30d, week52_low, 'pct_1m', pct_1m FROM latest WHERE pct_1m IS NOT NULL AND pct_1m <= -10 " +
                     "ORDER BY time_window, pct_change ASC";
 
             List<Map<String, Object>> drops = jdbcTemplate.queryForList(sql);
             log.info("Found {} stocks with >= 10% drops", drops.size());
 
-            String message;
             if (drops.isEmpty()) {
-                message = "✅ No major drops today.";
+                sendTelegramMessage("✅ No major drops today.");
             } else {
-                message = buildDropMessage(drops);
+                String fullMessage = buildDropMessage(drops);
+                List<String> messages = splitMessages(fullMessage);
+                sendMessages(messages);
             }
-
-            sendTelegramMessage(message);
         } catch (Exception e) {
             log.error("Error sending drop report: {}", e.getMessage(), e);
         }
+    }
+
+    private void sendMessages(List<String> messages) {
+        for (int i = 0; i < messages.size(); i++) {
+            sendTelegramMessage(messages.get(i));
+            if (i < messages.size() - 1) {
+                try {
+                    Thread.sleep(500);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+            }
+        }
+        log.info("Sent {} drop report messages", messages.size());
+    }
+
+    private List<String> splitMessages(String fullMessage) {
+        List<String> messages = new ArrayList<>();
+        int maxLength = 3500;
+
+        if (fullMessage.length() <= maxLength) {
+            messages.add(fullMessage);
+            return messages;
+        }
+
+        String[] lines = fullMessage.split("\n");
+        StringBuilder current = new StringBuilder();
+
+        for (String line : lines) {
+            String lineWithNewline = line + "\n";
+
+            if (current.length() + lineWithNewline.length() > maxLength) {
+                if (current.length() > 0) {
+                    messages.add(current.toString().trim());
+                    current = new StringBuilder();
+                }
+            }
+            current.append(lineWithNewline);
+        }
+
+        if (current.length() > 0) {
+            messages.add(current.toString().trim());
+        }
+
+        return messages;
     }
 
     private String buildDropMessage(List<Map<String, Object>> drops) {
@@ -88,20 +132,38 @@ public class TelegramService {
             grouped.get(window).add(drop);
         }
 
-        // Build message by window
+        // Build message by window (all drops, will be split across messages if needed)
         for (String window : windowOrder) {
             List<Map<String, Object>> windowDrops = grouped.get(window);
             if (!windowDrops.isEmpty()) {
                 String windowLabel = getWindowLabel(window);
                 sb.append("<b>").append(windowLabel).append("</b>\n");
+
                 for (Map<String, Object> drop : windowDrops) {
                     String symbol = (String) drop.get("tradingsymbol");
                     double pctChange = ((Number) drop.get("pct_change")).doubleValue();
-                    sb.append("• ").append(symbol).append(" — ").append(String.format("%.1f%%", pctChange)).append("\n");
+                    double closePrice = ((Number) drop.get("close_price")).doubleValue();
+                    long volume = ((Number) drop.get("volume")).longValue();
+                    double avgVolume = ((Number) drop.get("avg_volume_30d")).doubleValue();
+                    double week52Low = ((Number) drop.get("week52_low")).doubleValue();
+
+                    double volRatio = avgVolume > 0 ? volume / avgVolume : 0;
+                    double pctFromLow = week52Low > 0 ? ((closePrice - week52Low) / week52Low) * 100 : 0;
+
+                    sb.append("• ").append(symbol).append(" — ").append(String.format("%.1f%%", pctChange))
+                        .append(" | ₹").append(String.format("%.2f", closePrice))
+                        .append(" | Vol ").append(String.format("%.1f", volRatio)).append("x")
+                        .append(" | +").append(String.format("%.0f%%", pctFromLow)).append(" from low\n");
                 }
                 sb.append("\n");
             }
         }
+
+        // Add guidance (at end, will be in last message if split)
+        sb.append("<b>📊 Guidance:</b>\n");
+        sb.append("• High vol (&gt;1.5x avg) + near low (&lt;20% from low) → avoid (knife falling)\n");
+        sb.append("• High vol + far from low (&gt;50% from low) → potential buy (healthy pullback)\n");
+        sb.append("• Low vol drop (&lt;1x avg) → thin selling, wait for confirmation\n");
 
         return sb.toString();
     }

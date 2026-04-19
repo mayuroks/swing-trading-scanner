@@ -3,7 +3,9 @@
 .vscode/
 HELP.md
 build/
+bin/
 gradle/cache/
 target/
 signals.json
 .claude/
+**/*.class
