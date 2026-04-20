@@ -9,3 +9,4 @@ target/
 signals.json
 .claude/
 **/*.class
+src/main/resources/application.properties

@@ -2,7 +2,6 @@ package com.example.demo;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -20,20 +19,19 @@ public class TelegramService {
 
     private static final Logger log = LoggerFactory.getLogger(TelegramService.class);
 
-    @Value("${telegram.bot.token:}")
-    private String botToken;
-
-    @Value("${telegram.chat.id:}")
-    private String chatId;
-
     private final JdbcTemplate jdbcTemplate;
+    private final KiteConfig kiteConfig;
     private final RestTemplate restTemplate = new RestTemplate();
 
-    public TelegramService(JdbcTemplate jdbcTemplate) {
+    public TelegramService(JdbcTemplate jdbcTemplate, KiteConfig kiteConfig) {
         this.jdbcTemplate = jdbcTemplate;
+        this.kiteConfig = kiteConfig;
     }
 
     public void sendDropReport() {
+        String botToken = kiteConfig.getTelegramBotToken();
+        String chatId = kiteConfig.getTelegramChatId();
+
         if (botToken == null || botToken.isEmpty() || chatId == null || chatId.isEmpty()) {
             log.warn("Telegram config missing. Skipping drop report.");
             return;
@@ -193,6 +191,9 @@ public class TelegramService {
 
     private void sendTelegramMessage(String text) {
         try {
+            String botToken = kiteConfig.getTelegramBotToken();
+            String chatId = kiteConfig.getTelegramChatId();
+
             String url = "https://api.telegram.org/bot" + botToken + "/sendMessage";
 
             String encodedText = URLEncoder.encode(text, StandardCharsets.UTF_8);
